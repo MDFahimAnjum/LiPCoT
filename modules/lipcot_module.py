@@ -1,12 +1,12 @@
 #%%
 from turbolpc.analysis import arburg_matrix, arburg_warped_matrix # type: ignore
-from turbolpc.utils import freqz, arcoeff_warp # type: ignore
+from turbolpc.utils import freqz, arcoeff_warp,arcoeff_to_cep,cep_to_arcoeff # type: ignore
 import numpy as np
-from scipy.signal import tf2zpk
+from scipy.signal import tf2zpk, zpk2tf
 from dataclasses import dataclass
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-
+import cmath
 from transformers import BertTokenizer
 from hugtokencraft import editor # type: ignore
 
@@ -22,9 +22,10 @@ class LiPCoTdata:
     token_ids: int = -1 # singal windows x 1
     tokenized: str =''
 
-def calculate_ar(dataset,order,w_factor):
+def calculate_ar(dataset,order,w_factor,case_id):
     lkdataset=[]
     for edata in dataset:
+        Fs=edata.Fs
         if w_factor is None:
             ar_coeffs,ar_sigmas,_=arburg_matrix(edata.data, order)
         else:
@@ -35,128 +36,124 @@ def calculate_ar(dataset,order,w_factor):
                 ar_coeffs[:,i]=arcoeff_warp(a=ar_coeffs[:,i],warp_factor=w_factor,task="unwarp")
             """
         ar_coeffs= np.real(ar_coeffs.T) # singal windows x AR order
-        ar_features=ar_feature_calculation(ar_coeffs,ar_sigmas) # singal windows x AR order
+        ar_features=ar_feature_calculation(ar_coeffs,ar_sigmas,Fs,case_id) # singal windows x AR order
         ldata=LiPCoTdata(label=edata.label,data=edata.data,Fs=edata.Fs,ar_coeff=ar_coeffs,ar_sigma=ar_sigmas,ar_feature=ar_features)
         lkdataset.append(ldata)
     return lkdataset
 
 # helper function for calculate_ar which calculates features
-def ar_feature_calculation(ar_features,ar_sigmas):
+def ar_feature_calculation(ar_features,ar_sigmas,Fs,case_id):
     """
     input: ar_feature=obs x feature
             ar_sigmas=1 x obs
     """
-    #total_feature=2*ar_features.shape[1]+1 # method 1
-    #total_feature=ar_features.shape[1]+1 # method 3
-    #total_feature=2*ar_features.shape[1]+1-4 # method 1.1
-    #total_feature=ar_features.shape[1]+1 # method 1.2
-    #total_feature=ar_features.shape[1]+1-4# method 1.3
-    total_feature=ar_features.shape[1]+1 # method 2,3,4
+
+    if case_id==1: # method 1
+        total_feature=2*ar_features.shape[1]+1
+    else: # method 2,3
+        total_feature=ar_features.shape[1]+1
+
+
     new_ar_features = np.zeros((ar_features.shape[0], total_feature))
     #new_ar_features = np.zeros((ar_features.shape[0], total_feature),dtype=complex) # method 4
     for i in range(ar_features.shape[0]):
         row=ar_features[i,:].copy()
         sigma=ar_sigmas[i].copy()
-        # Insert 1 at the beginning since we removed it during arburg
-        a=np.insert(row, 0, 1)
-        b=np.zeros_like(a)
-        b[0]=1
-        #get poles
-        z, p, k = tf2zpk(b, a)
         
         # method 1
-        """
-        Use radius and angle of all AR poles
-        w/o angle normalized and sigma added as another feature
-        """
-        """
-        # keep the poles with +ve imag part. Skipped: This is a problem as sometimes they can be in the real line
-        #p=p[p.imag>=0]
-        #features are radius and angle of poles
-        #curr_feature=np.concatenate((np.abs(p),np.angle(p)))  # angle value -pi to pi
-        #curr_feature=np.concatenate((np.abs(p),0.5+np.angle(p)/(np.pi))) # angle value 0 to 1
-        
-        p_angles=self.Fs*np.abs(np.angle(p))/(2*np.pi)
-        p=p[np.argsort(p_angles)] # reorder poles by increasing frequency. Adding these doesn't change things much
-        #p=p[1:-1]# method 1.1 -ignoring 1st and last pairs: these are likely filter effect
-        #p=p[::2] # method 1.2, 1.3
-        #p=p[1:-1] # method 1.3
-        p_rad=-2*np.log10(1-np.abs(p))
-        #p_rad=np.abs(p)
-        p_ang=self.Fs*np.abs(np.angle(p))/(2*np.pi)
-        curr_feature=np.concatenate((p_rad,p_ang)) # angle value 0 to 1 but conjugate have same angle
-        curr_feature=np.append(curr_feature,np.log10(sigma))         
-        """
+        if case_id==1:
+            """
+            Use radius and angle of all AR poles
+            w/o angle normalized and sigma added as another feature
+            """
+            # Insert 1 at the beginning since we removed it during arburg
+            a=np.insert(row, 0, 1)
+            b=np.zeros_like(a)
+            b[0]=1
+            #get poles
+            z, p, k = tf2zpk(b, a)
+
+            p_angles=Fs*np.abs(np.angle(p.copy()))/(2*np.pi)
+            p=p[np.argsort(p_angles)] # reorder poles by increasing frequency. Adding these doesn't change things much
+            p_rad=-2*np.log10(1-np.abs(p.copy()))
+            #p_rad=np.abs(p)
+            p_ang=Fs*np.angle(p.copy())/(2*np.pi)
+            curr_feature=np.concatenate((p_rad,p_ang)) # angle value 0 to 1 but conjugate have same angle
+            curr_feature=np.append(curr_feature,np.log10(sigma))         
+
 
         #method 2
-        """
-        Use AR coefficients as features 
-        """
-        curr_feature=np.append(row,np.log10(sigma))
+        if case_id==2:
+            """
+            Use AR coefficients as features 
+            """
+            curr_feature=np.append(row,np.log10(sigma))
 
         #method 3
-        """
-        Convert linear prediction coefficents (LPC) to cepstral coefficients
-        but we can calculate from the poles as well (TODO?)
-        """
+        if case_id==3:
+            """
+            Convert linear prediction coefficents (LPC) to cepstral coefficients
+            but we can calculate from the poles as well (TODO?)
+            """
 
-        """
-        curr_feature=arcoeff_to_cep(row,sigma,total_feature)
-        # scale: n^.5*c_n for making euclidian compatible to cepstral distance calculation
-        curr_feature= np.sqrt(np.insert(np.linspace(1,total_feature-1,total_feature-1),0,1))*curr_feature
-        ##curr_feature= curr_feature[1:]
-        """
+            curr_feature=arcoeff_to_cep(row,sigma,total_feature)
+            # scale: n^.5*c_n for making euclidian compatible to cepstral distance calculation
+            curr_feature= np.sqrt(np.insert(np.linspace(1,total_feature-1,total_feature-1),0,1))*curr_feature
+            ##curr_feature= curr_feature[1:]
+
 
         #method 4
-        """
-        TODO: Use actual distance metric with dbscan/optics/Agglomerative?
-        """
-        #curr_feature=p
-        ##curr_feature=np.concatenate((np.real(p),np.imag(p)))
+            """
+            TODO: Use actual distance metric with dbscan/optics/Agglomerative?
+            """
+            #curr_feature=p
+            ##curr_feature=np.concatenate((np.real(p),np.imag(p)))
 
         new_ar_features[i,:]=curr_feature.copy()
     return new_ar_features
 # helper function to get ar coeff from features
-def ar_feature_to_arcoef(ar_feature):
+def ar_feature_to_arcoef(ar_feature,lk_model):
+    case_id=lk_model['method']
+    order=lk_model['order']
+    Fs=lk_model['Fs']
     """
     takes ar_feature and outputs ar coeff [a1,a2,...]
     """
-    
-    #""" # method 2
-    sigma=ar_feature[-1]
-    sigma=10**sigma
-    a=ar_feature[:-1]
-    #"""
+    if case_id==2:
+        # method 2
+        sigma=ar_feature[-1]
+        sigma=10**sigma
+        a=ar_feature[:-1]
 
-    """ # method 1
-    #order=int(myTs.order/2) # method 1.2, 1.3
-    order=int(self.order)
-    p_rad=ar_feature[:order]
-    p_angle=ar_feature[order:]
-    p_angle=p_angle[:-1]# ignore sigma
-    #p_rad=TsTokenizer.duplicate_elements(p_rad) # method 1.2, 1.3
-    #p_angle=TsTokenizer.duplicate_elements(p_angle) # method 1.2, 1.3
-    p_rad=np.array(p_rad)
-    p_angle=np.array(p_angle)
-    p_angle=2*np.pi*p_angle/self.Fs
-    p_angle=TsTokenizer.handle_positive_duplicates(p_angle) # method 1.2, 1.3
-    p_rad=1-10**(p_rad/(-2))
-    k=1#10**ar_f[-1]
-    p=np.array(p_rad,dtype=complex)
-    for i in range(len(p)):
-        p[i]=cmath.rect(p_rad[i], p_angle[i]) # error
-    z=0*p
-    if self.ar_lambda is None:
-        p=p
-    else:
-        # pole conversion
-        p_new=(p+self.ar_lambda)/(1+self.ar_lambda* p)
-        p=p_new
-    b,a=zpk2tf(z, p, k)
-    a=a[1:] # exclude the first 1
-    sigma=ar_feature[-1]
-    sigma=10**sigma
-    """
+    if case_id==3:
+        # method 3
+        total_feature=ar_feature.shape[0]
+        sigma=ar_feature[0]
+        sigma=10**sigma
+        curr_feature= 1/np.sqrt(np.insert(np.linspace(1,total_feature-1,total_feature-1),0,1))*ar_feature
+        a=cep_to_arcoeff(curr_feature,order)
+
+    if case_id==1:
+        # method 1
+        #order=int(myTs.order/2) # method 1.2, 1.3
+        order=int(order)
+        p_rad=ar_feature[:order].copy()
+        p_angle=ar_feature[order:].copy()
+        p_angle=p_angle[:-1]# ignore sigma
+        p_rad=np.array(p_rad)
+        p_angle=np.array(p_angle)
+        p_angle=(2*np.pi)*p_angle/Fs
+        p_rad=1-10**(p_rad/(-2))
+        k=1#10**ar_f[-1]
+        p=np.array(p_rad,dtype=complex)
+        for i in range(len(p)):
+            p[i]=cmath.rect(p_rad[i], p_angle[i]) # error
+        z=0*p
+        b,a=zpk2tf(z, p, k)
+        a=a[1:] # exclude the first 1
+        sigma=ar_feature[-1]
+        sigma=10**sigma
+
     return a,sigma
 
 # get ar coeff of cluster centers
@@ -168,7 +165,7 @@ def cluster_to_arcoef(lk_model):
     for i in range(cluster_features.shape[0]):
         c_feature=cluster_features[i,:]
         c_feature=scaler.inverse_transform(c_feature.reshape(1,-1))[0]
-        ar_coeff,ar_sigma=ar_feature_to_arcoef(c_feature)
+        ar_coeff,ar_sigma=ar_feature_to_arcoef(c_feature,lk_model)
         cluster_arcoeff.append((ar_coeff,ar_sigma))
     return cluster_arcoeff
 
@@ -231,12 +228,12 @@ def encode_dataset(lkdataset,lk_model):
     kmeans_model_data=lk_model['kmeans_model']
     WordMap=lk_model['WordMap']
     unk_token=lk_model['unk_token']
-
+    case_id=lk_model['method']
     order=lk_model['order']
     w_factor=lk_model['w_factor']
 
     # get lpc coeff and lpc features
-    lkdataset=calculate_ar(lkdataset,order,w_factor)
+    lkdataset=calculate_ar(lkdataset,order,w_factor,case_id)
 
     # encode features
     for lkdata in lkdataset:
@@ -256,9 +253,10 @@ def lipkot_train(dataset,lk_settings):
     order=lk_settings['order']
     w_factor=lk_settings['w_factor']
     vocab_length=lk_settings['vocab_length']
+    case_id=lk_settings['method']
 
     # get lpc coeff and lpc features
-    lkdataset=calculate_ar(dataset,order,w_factor)
+    lkdataset=calculate_ar(dataset,order,w_factor,case_id)
     # collect all features for kmeans
     feature_array=collect_features(lkdataset)
     # kmeans
@@ -275,5 +273,7 @@ def lipkot_train(dataset,lk_settings):
     lk_model=lk_settings.copy()
     lk_model['kmeans_model']=kmeans_model_data
     lk_model['WordMap']=WordMap
+    lk_model['method']=case_id
+    lk_model['Fs']=lkdataset[0].Fs
     return lk_model
     
