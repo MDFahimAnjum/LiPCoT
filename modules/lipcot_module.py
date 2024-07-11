@@ -128,9 +128,9 @@ def ar_feature_to_arcoef(ar_feature,lk_model):
     if case_id==3:
         # method 3
         total_feature=ar_feature.shape[0]
-        sigma=ar_feature[0]
-        sigma=10**sigma
-        curr_feature= 1/np.sqrt(np.insert(np.linspace(1,total_feature-1,total_feature-1),0,1))*ar_feature
+        sigma=ar_feature[0].copy()
+        sigma=np.exp(sigma)
+        curr_feature= 1/np.sqrt(np.insert(np.linspace(1,total_feature-1,total_feature-1),0,1))*ar_feature.copy()
         a=cep_to_arcoeff(curr_feature,order)
 
     if case_id==1:
