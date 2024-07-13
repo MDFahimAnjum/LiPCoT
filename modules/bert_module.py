@@ -178,8 +178,11 @@ def perf_metrics(y_true, y_pred,y_score):
     # Calculate specificity
     specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
 
+    # Calculate precision
+    precision = cm[1, 1] / (cm[1, 1] + cm[0, 1])
+    
     # Calculate F1 score
-    f1 = 2 * (sensitivity * specificity) / (sensitivity + specificity)
+    f1 = 2 * (precision * sensitivity) / (precision + sensitivity)
 
     # Calculate AUC
     #auc = roc_auc_score(y_true, y_pred)
@@ -189,6 +192,7 @@ def perf_metrics(y_true, y_pred,y_score):
     print("Confusion Matrix:")
     print(cm)
     print("Accuracy:", accuracy*100)
+    print("Precision:", precision*100)
     print("Sensitivity (Recall):", sensitivity*100)
     print("Specificity:", specificity*100)
     print("F1 Score:", f1)
