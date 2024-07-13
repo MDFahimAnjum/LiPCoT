@@ -1,7 +1,15 @@
 # LiPCoT: Linear Predictive Coding based Tokenizer for Self-Supervised Learning of Time Series Data via BERT
 
+LiPCoT (Linear Predictive Coding based Tokenizer for time series) is a novel tokenizer that encodes time series data into a sequence of tokens, enabling self-supervised learning of time series using existing Language model architectures such as BERT. 
+
+- Unlike traditional time series tokenizers that rely heavily on CNN encoder for time series feature generation, LiPCoT employs stochastic modeling through linear predictive coding to create a latent space for time series providing a compact yet rich representation of the inherent stochastic nature of the data. 
+- LiPCoT is computationally efficient and can effectively handle time series data with varying sampling rates and lengths, overcoming common limitations of existing time series tokenizers. 
+ 
+
 ## Dataset 
 We use EEG dataset of 28 PD and 28 control participants.
+- Original dataset can be found at [link](http://predict.cs.unm.edu/downloads). The data are in .mat formats and you need Matlab to load them. (No need for this unless you are interested into the original EEG data)
+- Raw CSV dataset used for this repo can be found at [link](https://www.dropbox.com/scl/fi/xinqn33vof0bnb9rlvmdh/raw.zip?rlkey=jb4dyumh7v82vbj36wsb53x13&dl=0). Download this for running all steps in this repo.
 
 ## How to run
 - If you want to run all steps:
