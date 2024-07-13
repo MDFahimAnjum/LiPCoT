@@ -192,6 +192,7 @@ def perf_metrics(y_true, y_pred,y_score):
     print("Confusion Matrix:")
     print(cm)
     print("Accuracy:", accuracy*100)
+    print("Precision:", precision*100)
     print("Sensitivity (Recall):", sensitivity*100)
     print("Specificity:", specificity*100)
     print("F1 Score:", f1)
