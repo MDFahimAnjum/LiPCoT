@@ -38,5 +38,8 @@ __If you are running code with data from GitHub, start with this step.__
 ### 6. Classification task: without pretraining
 `finetune_bert_without_pretrain` notebook uses a randomly initialized BERT model and fine tunes it for classification
 
-### 7. Classification task: CNN
-`cnn_classifier` notebook uses CNN model for the classification task
+### 7. Classification task: CNN-based architectures
+1. `cnn_classifier` notebook uses CNN model as described in [Oh et. al. (2018)](https://link.springer.com/article/10.1007/s00521-018-3689-5)
+2. `deepnet_classifier` notebook uses Deep Convolutional Network as described in [Schirrmeister et. al. (2017)](https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.23730)
+3. `shallownet_classifier` notebook uses Shallow Convolutional Network as described in [Schirrmeister et. al. (2017)](https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.23730)
+4. `eegnet_classifier` notebook uses EEGNet as described in [here](https://github.com/vlawhern/arl-eegmodels/blob/master/EEGModels.py)
