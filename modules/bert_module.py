@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 from sklearn.metrics import confusion_matrix, accuracy_score, classification_report, roc_auc_score
+from tqdm import tqdm
 
 #%% 
 
@@ -198,3 +199,80 @@ def perf_metrics(y_true, y_pred,y_score):
     print("F1 Score:", f1)
     print("AUC Score:", auc)
     return cm, sensitivity,specificity,f1,auc
+
+def model_trainer(classification_model,train_loader,val_loader,training_arg,device):
+    
+    modelfullpath=training_arg['modelfullpath']
+    criterion=training_arg['criterion']
+    optimizer=training_arg['optimizer']
+    num_epochs=training_arg['epochs']
+    patience=training_arg['patience']
+    random_seed=training_arg['seed']
+
+    # Set the random seed for reproducibility
+    random.seed(random_seed)
+    torch.manual_seed(random_seed)
+    torch.cuda.manual_seed(random_seed)
+    np.random.seed(random_seed)
+
+    # Training loop
+    average_epoch_loss_all=[]
+    acc_train_all=[]
+    acc_val_all=[]
+    best_val_accuracy = 0.0
+
+    for epoch in range(num_epochs):
+        classification_model.train()
+        epoch_loss = 0.0  # Initialize epoch loss
+        num_batches = len(train_loader)
+
+        # Use tqdm to create a progress bar for the training loop
+        with tqdm(total=num_batches, desc=f'Epoch {epoch + 1}/{num_epochs}', unit='batch') as progress_bar:
+            for batch_idx, batch in enumerate(train_loader):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
+                # Convert labels to float type
+                labels = labels.float()
+                optimizer.zero_grad()
+                logits = classification_model(input_ids, attention_mask)
+                probs = torch.sigmoid(logits)
+                probs_normalized = probs / probs.sum(dim=1, keepdim=True)
+                loss = criterion(probs_normalized, labels)
+                loss.backward()
+                optimizer.step()
+
+                epoch_loss += loss.item()
+
+                # Update progress bar
+                progress_bar.set_postfix({'Loss': loss.item()})
+                progress_bar.update()
+
+        # Calculate and print average epoch loss
+        average_epoch_loss = epoch_loss / num_batches
+        #print(f'Epoch {epoch + 1} - Average Loss: {average_epoch_loss:.4f}')
+        average_epoch_loss_all.append(average_epoch_loss)
+        # Switch to evaluation mode for accuracy calculation
+        classification_model.eval()
+        # Calculate training accuracy
+        accuracy, _ , _ , _= evaluate_binary_accuracy(classification_model, train_loader,device)
+        acc_train_all.append(accuracy)
+        # Calculate validation accuracy
+        v_accuracy, _ , _ , _ = evaluate_binary_accuracy(classification_model, val_loader,device)
+        acc_val_all.append(v_accuracy)
+        # Check if current validation accuracy is the best
+        if v_accuracy > best_val_accuracy:
+            best_val_accuracy = v_accuracy
+            torch.save(classification_model.state_dict(),modelfullpath) # Save the model state
+            print(f'model state saved with validation accuracy: {best_val_accuracy:.4f}')
+        # Switch back to training mode for the next epoch
+        classification_model.train()
+
+    print('Fine tune completed')
+
+    results={'epoch_loss':average_epoch_loss_all, 
+             'training_acc': acc_train_all, 
+             'validation_acc':acc_val_all,
+             'best_validation_acc': best_val_accuracy
+            }
+    return results
