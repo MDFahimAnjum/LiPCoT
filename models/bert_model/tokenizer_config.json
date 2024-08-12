@@ -46,7 +46,7 @@
   "do_basic_tokenize": true,
   "do_lower_case": true,
   "mask_token": "[MASK]",
-  "model_max_length": 128,
+  "model_max_length": 64,
   "never_split": null,
   "pad_token": "[PAD]",
   "sep_token": "[SEP]",
